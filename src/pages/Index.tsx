@@ -407,7 +407,7 @@ const Index = () => {
           <CardContent>
             <ScrollArea className="h-[500px]">
               <div className="space-y-3">
-                {chats.length === 0 ? (
+                {!Array.isArray(chats) || chats.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
                     Нет активных чатов. Найдите собеседника в разделе "Поиск"!
                   </p>
