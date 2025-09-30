@@ -132,14 +132,18 @@ def login_user(event: Dict[str, Any]) -> Dict[str, Any]:
     cur.execute("""
         SELECT id, email, name, avatar, native_language, learning_language, 
                level, xp, country, is_vip, vip_badge, avatar_frame, coins,
-               streak_days, total_messages, words_learned, gifts_received
+               streak_days, total_messages, words_learned, gifts_received,
+               region, city, is_online
         FROM users WHERE email = %s
     """, (body['email'],))
     
     user = cur.fetchone()
     
     if user:
-        cur.execute("UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = %s", (user['id'],))
+        cur.execute(
+            "UPDATE users SET last_seen = CURRENT_TIMESTAMP, is_online = true WHERE id = %s",
+            (user['id'],)
+        )
         conn.commit()
     
     cur.close()
@@ -164,37 +168,59 @@ def get_users(event: Dict[str, Any]) -> Dict[str, Any]:
     params = event.get('queryStringParameters', {}) or {}
     search = params.get('search', '')
     limit = int(params.get('limit', 20))
+    region = params.get('region', '')
+    country = params.get('country', '')
+    online_only = params.get('onlineOnly', '') == 'true'
     
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     
-    if search:
-        cur.execute("""
-            SELECT id, name, avatar, native_language as language, 
-                   learning_language as learning, level, country, 
-                   is_vip, vip_badge, avatar_frame
-            FROM users 
-            WHERE name ILIKE %s OR native_language ILIKE %s OR learning_language ILIKE %s OR country ILIKE %s
-            LIMIT %s
-        """, (f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%', limit))
-    else:
-        cur.execute("""
-            SELECT id, name, avatar, native_language as language, 
-                   learning_language as learning, level, country, 
-                   is_vip, vip_badge, avatar_frame
-            FROM users 
-            ORDER BY last_active DESC
-            LIMIT %s
-        """, (limit,))
+    query = """
+        SELECT id, name, avatar, native_language as language, 
+               learning_language as learning, level, country, region, city,
+               is_vip, vip_badge, avatar_frame, is_online, last_seen
+        FROM users 
+        WHERE 1=1
+    """
+    params_list = []
     
-    users = cur.fetchall()
+    if search:
+        query += " AND (name ILIKE %s OR native_language ILIKE %s OR learning_language ILIKE %s OR country ILIKE %s)"
+        search_param = f'%{search}%'
+        params_list.extend([search_param, search_param, search_param, search_param])
+    
+    if region:
+        query += " AND region ILIKE %s"
+        params_list.append(f'%{region}%')
+    
+    if country:
+        query += " AND country ILIKE %s"
+        params_list.append(f'%{country}%')
+    
+    if online_only:
+        query += " AND is_online = true"
+    
+    query += " ORDER BY is_online DESC, last_seen DESC LIMIT %s"
+    params_list.append(limit)
+    
+    cur.execute(query, tuple(params_list))
+    
+    users_raw = cur.fetchall()
+    
+    users = []
+    for user in users_raw:
+        user_dict = dict(user)
+        if 'last_seen' in user_dict and user_dict['last_seen']:
+            user_dict['last_seen'] = user_dict['last_seen'].isoformat()
+        users.append(user_dict)
+    
     cur.close()
     conn.close()
     
     return {
         'statusCode': 200,
         'headers': cors_headers(),
-        'body': json.dumps([dict(u) for u in users]),
+        'body': json.dumps(users),
         'isBase64Encoded': False
     }
 
@@ -598,10 +624,12 @@ def send_gift(event: Dict[str, Any]) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
+    chat_id = body.get('chatId')
+    
     cur.execute("""
-        INSERT INTO gift_transactions (sender_id, receiver_id, gift_id)
-        VALUES (%s, %s, %s)
-    """, (body['senderId'], body['receiverId'], body['giftId']))
+        INSERT INTO gift_transactions (sender_id, receiver_id, gift_id, chat_id)
+        VALUES (%s, %s, %s, %s)
+    """, (body['senderId'], body['receiverId'], body['giftId'], chat_id))
     
     cur.execute("UPDATE users SET coins = coins - %s WHERE id = %s", (gift['price'], body['senderId']))
     cur.execute("UPDATE users SET gifts_received = gifts_received + 1 WHERE id = %s", (body['receiverId'],))

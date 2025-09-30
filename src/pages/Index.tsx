@@ -38,6 +38,10 @@ const Index = () => {
   const [gifts, setGifts] = useState<Gift[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showGiftModal, setShowGiftModal] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState('');
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [translatedMessages, setTranslatedMessages] = useState<{[key: number]: string}>({});
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -63,7 +67,11 @@ const Index = () => {
 
   const loadUsers = async () => {
     try {
-      const data = await api.getUsers(searchQuery);
+      const data = await api.getUsers({
+        search: searchQuery,
+        region: selectedRegion,
+        onlineOnly: onlineOnly
+      });
       setUsers(data);
     } catch (error: any) {
       toast.error('Ошибка загрузки пользователей');
@@ -129,6 +137,32 @@ const Index = () => {
       toast.success('Сообщение отправлено!');
     } catch (error: any) {
       toast.error('Ошибка отправки сообщения');
+    }
+  };
+
+  const handleTranslateMessage = async (messageId: number, text: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const result = await api.translateText(text, currentUser.native_language);
+      setTranslatedMessages(prev => ({ ...prev, [messageId]: result.translated }));
+    } catch (error: any) {
+      toast.error('Ошибка перевода');
+    }
+  };
+
+  const handleSendGift = async (giftId: number, receiverId: number) => {
+    if (!currentUser) return;
+    
+    try {
+      await api.sendGift(currentUser.id, receiverId, giftId, selectedChat?.id);
+      toast.success('Подарок отправлен!');
+      setShowGiftModal(false);
+      
+      const updatedUser = await api.getUserProfile(currentUser.id);
+      useStore.setState({ currentUser: updatedUser });
+    } catch (error: any) {
+      toast.error(error.message || 'Ошибка отправки подарка');
     }
   };
 
@@ -322,19 +356,36 @@ const Index = () => {
           <CardDescription>Общайся с людьми со всего мира</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative">
-            <Icon name="Search" className="absolute left-3 top-3 text-muted-foreground" size={20} />
-            <Input 
-              placeholder="Поиск по языку, стране..."
-              className="pl-10 h-12 text-lg"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && loadUsers()}
-            />
+          <div className="space-y-3">
+            <div className="relative">
+              <Icon name="Search" className="absolute left-3 top-3 text-muted-foreground" size={20} />
+              <Input 
+                placeholder="Поиск по языку, стране..."
+                className="pl-10 h-12 text-lg"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && loadUsers()}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Input 
+                placeholder="Регион (например, Москва)"
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value)}
+              />
+              <Button 
+                variant={onlineOnly ? "default" : "outline"}
+                onClick={() => setOnlineOnly(!onlineOnly)}
+                className="flex items-center gap-2"
+              >
+                <Icon name="Circle" size={16} className={onlineOnly ? "text-green-500" : ""} />
+                Онлайн
+              </Button>
+            </div>
+            <Button onClick={loadUsers} className="w-full">
+              Искать
+            </Button>
           </div>
-          <Button onClick={loadUsers} className="mt-3 w-full">
-            Искать
-          </Button>
         </CardContent>
       </Card>
 
@@ -359,7 +410,13 @@ const Index = () => {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-lg">{user.name}</h3>
                     <span className="text-xl">{getCountryFlag(user.country)}</span>
+                    {user.is_online && (
+                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    )}
                   </div>
+                  {user.region && (
+                    <p className="text-xs text-muted-foreground mb-1">📍 {user.region}</p>
+                  )}
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm">
                       <Badge variant="secondary" className="bg-primary/10">
@@ -468,27 +525,57 @@ const Index = () => {
                     <div className={`max-w-[70%] rounded-2xl p-3 ${msg.sender_id === currentUser.id ? 'bg-primary text-white' : 'bg-muted'}`}>
                       <p className="text-sm font-semibold mb-1">{msg.sender_name}</p>
                       <p>{msg.message}</p>
-                      {msg.translated_message && (
-                        <p className="text-xs mt-2 opacity-70 italic">🤖 {msg.translated_message}</p>
+                      {translatedMessages[msg.id] && (
+                        <div className="mt-2 p-2 bg-black/10 rounded-lg">
+                          <p className="text-xs opacity-70 flex items-center gap-1">
+                            <Icon name="Languages" size={14} />
+                            {translatedMessages[msg.id]}
+                          </p>
+                        </div>
                       )}
-                      <p className="text-xs mt-1 opacity-70">
-                        {new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs opacity-70">
+                          {new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {msg.sender_id !== currentUser.id && !translatedMessages[msg.id] && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 text-xs"
+                            onClick={() => handleTranslateMessage(msg.id, msg.message)}
+                          >
+                            <Icon name="Languages" size={14} />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Введите сообщение..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              />
-              <Button onClick={handleSendMessage} className="bg-gradient-to-r from-primary to-turquoise">
-                <Icon name="Send" size={20} />
-              </Button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowGiftModal(true)}
+                  className="flex items-center gap-1"
+                >
+                  <Icon name="Gift" size={16} />
+                  Подарок
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Введите сообщение..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                />
+                <Button onClick={handleSendMessage} className="bg-gradient-to-r from-primary to-turquoise">
+                  <Icon name="Send" size={20} />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -728,6 +815,44 @@ const Index = () => {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-primary/10 to-transparent h-2 pointer-events-none"></div>
+
+      <Dialog open={showGiftModal} onOpenChange={setShowGiftModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-2xl">
+              <Icon name="Gift" size={24} />
+              Отправить подарок
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[400px] mt-4">
+            <div className="grid grid-cols-3 gap-4 p-4">
+              {gifts.map(gift => (
+                <Card 
+                  key={gift.id} 
+                  className="hover:shadow-lg transition-all cursor-pointer hover:scale-105"
+                  onClick={() => selectedChat && handleSendGift(gift.id, selectedChat.partner_id)}
+                >
+                  <CardContent className="p-4 text-center">
+                    <div className="text-5xl mb-2">{gift.icon}</div>
+                    <h4 className="font-semibold text-sm mb-1">{gift.name}</h4>
+                    <div className="flex items-center justify-center gap-1 text-gold">
+                      <Icon name="Coins" size={14} />
+                      <span className="font-bold">{gift.price}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+          <div className="mt-4 p-3 bg-muted rounded-lg flex items-center justify-between">
+            <span className="text-sm">Ваш баланс:</span>
+            <div className="flex items-center gap-2 font-bold text-lg">
+              <Icon name="Coins" size={20} className="text-gold" />
+              {currentUser?.coins || 0}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

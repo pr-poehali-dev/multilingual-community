@@ -1,0 +1,4 @@
+ALTER TABLE t_p22749112_multilingual_communi.users ADD COLUMN IF NOT EXISTS region VARCHAR(100);
+ALTER TABLE t_p22749112_multilingual_communi.users ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE t_p22749112_multilingual_communi.users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false;
+ALTER TABLE t_p22749112_multilingual_communi.users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

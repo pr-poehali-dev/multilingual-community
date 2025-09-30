@@ -1,0 +1,26 @@
+{
+  "tests": [
+    {
+      "name": "Translate English to Spanish",
+      "method": "POST",
+      "body": {
+        "text": "Hello, how are you?",
+        "targetLang": "es",
+        "sourceLang": "en"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "original": "string",
+        "translated": "string",
+        "sourceLang": "string",
+        "targetLang": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Handle OPTIONS request",
+      "method": "OPTIONS",
+      "expectedStatus": 200
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 const API_URL = 'https://functions.poehali.dev/17f605ed-5358-4d1e-a134-ebb710e595a7';
+const TRANSLATE_URL = 'https://functions.poehali.dev/3be83a8b-27f0-4188-97d6-de6fc278ad0e';
 
 export interface User {
   id: number;
@@ -10,6 +11,8 @@ export interface User {
   level: number;
   xp: number;
   country: string;
+  region?: string;
+  city?: string;
   is_vip: boolean;
   vip_badge?: string | null;
   avatar_frame?: string | null;
@@ -18,6 +21,8 @@ export interface User {
   total_messages?: number;
   words_learned?: number;
   gifts_received?: number;
+  is_online?: boolean;
+  last_seen?: string;
 }
 
 export interface Chat {
@@ -42,6 +47,8 @@ export interface Message {
   sender_id: number;
   sender_name: string;
   sender_avatar: string;
+  original_language?: string;
+  is_translated?: boolean;
 }
 
 export interface Achievement {
@@ -109,9 +116,19 @@ export const api = {
     return apiCall('login', 'POST', { email });
   },
 
-  async getUsers(search?: string, limit: number = 20): Promise<User[]> {
+  async getUsers(options: {
+    search?: string;
+    limit?: number;
+    region?: string;
+    country?: string;
+    onlineOnly?: boolean;
+  } = {}): Promise<User[]> {
+    const { search, limit = 20, region, country, onlineOnly } = options;
     const params = new URLSearchParams({ limit: limit.toString() });
     if (search) params.append('search', search);
+    if (region) params.append('region', region);
+    if (country) params.append('country', country);
+    if (onlineOnly) params.append('onlineOnly', 'true');
     return fetch(`${API_URL}/?action=users&${params.toString()}`).then(r => r.json());
   },
 
@@ -155,11 +172,25 @@ export const api = {
     return apiCall('complete_lesson', 'POST', { userId, lessonId, score });
   },
 
-  async sendGift(senderId: number, receiverId: number, giftId: number): Promise<{ success: boolean }> {
-    return apiCall('send_gift', 'POST', { senderId, receiverId, giftId });
+  async sendGift(senderId: number, receiverId: number, giftId: number, chatId?: number): Promise<{ success: boolean }> {
+    return apiCall('send_gift', 'POST', { senderId, receiverId, giftId, chatId });
   },
 
   async getGifts(): Promise<Gift[]> {
     return fetch(`${API_URL}/?action=gifts`).then(r => r.json());
+  },
+
+  async translateText(text: string, targetLang: string, sourceLang: string = 'auto'): Promise<{
+    original: string;
+    translated: string;
+    sourceLang: string;
+    targetLang: string;
+  }> {
+    const response = await fetch(TRANSLATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, targetLang, sourceLang })
+    });
+    return response.json();
   },
 };
