@@ -693,7 +693,7 @@ const Index = () => {
             <TabsTrigger value="chats" className="flex flex-col gap-1 py-3">
               <Icon name="MessageCircle" size={24} />
               <span className="text-xs">Чаты</span>
-              {chats.some(c => c.unread_count > 0) && (
+              {Array.isArray(chats) && chats.some(c => c.unread_count > 0) && (
                 <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></div>
               )}
             </TabsTrigger>
