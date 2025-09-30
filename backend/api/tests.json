@@ -1,0 +1,52 @@
+{
+  "tests": [
+    {
+      "name": "Register new user",
+      "method": "POST",
+      "path": "/?action=register",
+      "body": {
+        "email": "test@example.com",
+        "name": "Test User",
+        "avatar": "🚀",
+        "nativeLanguage": "Russian",
+        "learningLanguage": "English",
+        "country": "RU"
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "id": "number",
+        "email": "string",
+        "name": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login user",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {
+        "email": "test@example.com"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "id": "number",
+        "email": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get users list",
+      "method": "GET",
+      "path": "/?action=users&limit=10",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get gifts",
+      "method": "GET",
+      "path": "/?action=gifts",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

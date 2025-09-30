@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useState, useEffect } from 'react';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,27 +7,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Icon from '@/components/ui/icon';
-
-interface User {
-  id: number;
-  name: string;
-  avatar: string;
-  language: string;
-  learning: string;
-  level: number;
-  country: string;
-  isVip: boolean;
-  vipBadge?: string;
-  avatarFrame?: string;
-}
-
-interface Gift {
-  id: number;
-  name: string;
-  icon: string;
-  price: number;
-}
+import AuthModal from '@/components/AuthModal';
+import { useStore } from '@/lib/store';
+import { api, type User, type Chat, type Message, type Achievement, type Gift, type Lesson } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface VipTier {
   id: number;
@@ -39,47 +23,173 @@ interface VipTier {
   badge: string;
 }
 
-interface Achievement {
-  id: number;
-  name: string;
-  description: string;
-  icon: string;
-  unlocked: boolean;
-  progress: number;
-}
-
 const Index = () => {
+  const { currentUser, isAuthenticated, logout } = useStore();
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  
+  const [users, setUsers] = useState<User[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [gifts, setGifts] = useState<Gift[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const currentUser: User = {
-    id: 0,
-    name: 'Ты',
-    avatar: '🚀',
-    language: 'Русский',
-    learning: 'English',
-    level: 15,
-    country: 'RU',
-    isVip: true,
-    vipBadge: 'gold',
-    avatarFrame: 'premium'
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setShowAuth(true);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadUsers();
+      loadGifts();
+      loadAchievements();
+      loadLessons();
+      loadChats();
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (selectedChat) {
+      loadMessages(selectedChat.id);
+    }
+  }, [selectedChat]);
+
+  const loadUsers = async () => {
+    try {
+      const data = await api.getUsers(searchQuery);
+      setUsers(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки пользователей');
+    }
   };
 
-  const users: User[] = [
-    { id: 1, name: 'Sarah Chen', avatar: '👩', language: 'English', learning: 'Русский', level: 12, country: 'US', isVip: false },
-    { id: 2, name: 'Yuki Tanaka', avatar: '🧑', language: '日本語', learning: 'English', level: 20, country: 'JP', isVip: true, vipBadge: 'diamond' },
-    { id: 3, name: 'Marco Rossi', avatar: '👨', language: 'Italiano', learning: 'Español', level: 8, country: 'IT', isVip: false },
-    { id: 4, name: 'Ana Silva', avatar: '👩', language: 'Português', learning: 'English', level: 18, country: 'BR', isVip: true, vipBadge: 'gold' },
-  ];
+  const loadChats = async () => {
+    if (!currentUser) return;
+    try {
+      const data = await api.getChats(currentUser.id);
+      setChats(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки чатов');
+    }
+  };
 
-  const gifts: Gift[] = [
-    { id: 1, name: 'Роза', icon: '🌹', price: 50 },
-    { id: 2, name: 'Торт', icon: '🎂', price: 100 },
-    { id: 3, name: 'Трофей', icon: '🏆', price: 200 },
-    { id: 4, name: 'Подарок', icon: '🎁', price: 150 },
-    { id: 5, name: 'Корона', icon: '👑', price: 500 },
-  ];
+  const loadMessages = async (chatId: number) => {
+    try {
+      const data = await api.getMessages(chatId);
+      setMessages(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки сообщений');
+    }
+  };
+
+  const loadAchievements = async () => {
+    if (!currentUser) return;
+    try {
+      const data = await api.getAchievements(currentUser.id);
+      setAchievements(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки достижений');
+    }
+  };
+
+  const loadGifts = async () => {
+    try {
+      const data = await api.getGifts();
+      setGifts(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки подарков');
+    }
+  };
+
+  const loadLessons = async () => {
+    if (!currentUser) return;
+    try {
+      const data = await api.getLessons(currentUser.learning_language, currentUser.id);
+      setLessons(data);
+    } catch (error: any) {
+      toast.error('Ошибка загрузки уроков');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || !currentUser) return;
+    
+    try {
+      await api.sendMessage(selectedChat.id, currentUser.id, newMessage);
+      setNewMessage('');
+      await loadMessages(selectedChat.id);
+      await loadChats();
+      toast.success('Сообщение отправлено!');
+    } catch (error: any) {
+      toast.error('Ошибка отправки сообщения');
+    }
+  };
+
+  const handleStartChat = async (user: User) => {
+    if (!currentUser) return;
+    
+    try {
+      const existingChat = chats.find(c => c.partner_id === user.id);
+      if (existingChat) {
+        setSelectedChat(existingChat);
+        setActiveTab('chats');
+        return;
+      }
+      
+      const { chatId } = await api.createChat(currentUser.id, user.id);
+      await loadChats();
+      
+      const newChat = {
+        id: chatId,
+        last_message: '',
+        last_message_time: new Date().toISOString(),
+        unread_count: 0,
+        partner_id: user.id,
+        partner_name: user.name,
+        partner_avatar: user.avatar,
+        partner_vip: user.is_vip,
+        partner_badge: user.vip_badge
+      };
+      setSelectedChat(newChat);
+      setActiveTab('chats');
+      toast.success('Чат создан!');
+    } catch (error: any) {
+      toast.error('Ошибка создания чата');
+    }
+  };
+
+  const handleCompleteLesson = async (lesson: Lesson) => {
+    if (!currentUser) return;
+    
+    setLoading(true);
+    try {
+      const result = await api.completeLesson(currentUser.id, lesson.id, 100);
+      toast.success(`+${result.xp} XP! Уровень ${result.level}`);
+      await loadLessons();
+    } catch (error: any) {
+      toast.error('Ошибка выполнения урока');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddFriend = async (friendId: number) => {
+    if (!currentUser) return;
+    
+    try {
+      await api.addFriend(currentUser.id, friendId);
+      toast.success('Друг добавлен!');
+    } catch (error: any) {
+      toast.error('Ошибка добавления друга');
+    }
+  };
 
   const vipTiers: VipTier[] = [
     {
@@ -108,48 +218,44 @@ const Index = () => {
     },
   ];
 
-  const achievements: Achievement[] = [
-    { id: 1, name: 'Первый друг', description: 'Добавь первого друга', icon: '👋', unlocked: true, progress: 100 },
-    { id: 2, name: 'Полиглот', description: 'Выучи 100 слов', icon: '📚', unlocked: true, progress: 100 },
-    { id: 3, name: 'Болтун', description: 'Отправь 50 сообщений', icon: '💬', unlocked: false, progress: 70 },
-    { id: 4, name: 'Щедрый', description: 'Подари 10 подарков', icon: '🎁', unlocked: false, progress: 40 },
-    { id: 5, name: 'Мастер языка', description: 'Достигни 30 уровня', icon: '🎓', unlocked: false, progress: 50 },
-    { id: 6, name: 'Неделя практики', description: '7 дней подряд', icon: '🔥', unlocked: false, progress: 85 },
-  ];
-
-  const lessons = [
-    { id: 1, title: 'Приветствия', completed: true, xp: 50 },
-    { id: 2, title: 'Числа 1-20', completed: true, xp: 50 },
-    { id: 3, title: 'Цвета', completed: false, xp: 75 },
-    { id: 4, title: 'Еда и напитки', completed: false, xp: 100 },
-  ];
-
-  const getVipBadgeColor = (badge?: string) => {
+  const getVipBadgeColor = (badge?: string | null) => {
     if (badge === 'diamond') return 'bg-gradient-to-r from-blue-400 to-purple-600';
     if (badge === 'gold') return 'bg-gradient-to-r from-yellow-400 to-yellow-600';
     return 'bg-gradient-to-r from-gray-300 to-gray-500';
   };
 
+  const getCountryFlag = (country: string) => {
+    const flags: Record<string, string> = {
+      'US': '🇺🇸', 'JP': '🇯🇵', 'IT': '🇮🇹', 'BR': '🇧🇷', 'RU': '🇷🇺',
+      'GB': '🇬🇧', 'ES': '🇪🇸', 'CN': '🇨🇳', 'KR': '🇰🇷', 'FR': '🇫🇷'
+    };
+    return flags[country] || '🌍';
+  };
+
+  if (!currentUser) {
+    return <AuthModal open={showAuth} onClose={() => {}} />;
+  }
+
   const renderHome = () => (
     <div className="space-y-6 animate-fade-in">
       <Card className="bg-gradient-to-br from-turquoise via-primary to-mint p-8 text-white border-none animate-scale-in">
         <h2 className="text-4xl font-bold mb-2">Привет, {currentUser.name}! 🎉</h2>
-        <p className="text-xl opacity-90 mb-4">Продолжай учить {currentUser.learning}</p>
+        <p className="text-xl opacity-90 mb-4">Продолжай учить {currentUser.learning_language}</p>
         <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4">
           <div className="flex justify-between mb-2">
             <span className="font-semibold">Уровень {currentUser.level}</span>
-            <span className="font-semibold">450 / 500 XP</span>
+            <span className="font-semibold">{currentUser.xp} / {currentUser.level * 100} XP</span>
           </div>
-          <Progress value={90} className="h-3 bg-white/30" />
+          <Progress value={(currentUser.xp / (currentUser.level * 100)) * 100} className="h-3 bg-white/30" />
         </div>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="hover:shadow-lg transition-all cursor-pointer hover:-translate-y-1">
+        <Card className="hover:shadow-lg transition-all cursor-pointer hover:-translate-y-1" onClick={() => setActiveTab('chats')}>
           <CardHeader className="text-center">
             <div className="text-5xl mb-2">💬</div>
             <CardTitle className="text-lg">Активные чаты</CardTitle>
-            <CardDescription className="text-3xl font-bold text-primary">8</CardDescription>
+            <CardDescription className="text-3xl font-bold text-primary">{chats.length}</CardDescription>
           </CardHeader>
         </Card>
         
@@ -157,15 +263,17 @@ const Index = () => {
           <CardHeader className="text-center">
             <div className="text-5xl mb-2">🔥</div>
             <CardTitle className="text-lg">Дни подряд</CardTitle>
-            <CardDescription className="text-3xl font-bold text-secondary">12</CardDescription>
+            <CardDescription className="text-3xl font-bold text-secondary">{currentUser.streak_days || 0}</CardDescription>
           </CardHeader>
         </Card>
         
-        <Card className="hover:shadow-lg transition-all cursor-pointer hover:-translate-y-1">
+        <Card className="hover:shadow-lg transition-all cursor-pointer hover:-translate-y-1" onClick={() => setActiveTab('profile')}>
           <CardHeader className="text-center">
             <div className="text-5xl mb-2">🏆</div>
             <CardTitle className="text-lg">Достижения</CardTitle>
-            <CardDescription className="text-3xl font-bold text-gold">15/30</CardDescription>
+            <CardDescription className="text-3xl font-bold text-gold">
+              {achievements.filter(a => a.unlocked).length}/{achievements.length}
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -178,17 +286,21 @@ const Index = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {lessons.map(lesson => (
+          {lessons.slice(0, 4).map(lesson => (
             <div key={lesson.id} className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all hover:scale-[1.02] cursor-pointer ${lesson.completed ? 'bg-success/10 border-success' : 'bg-muted border-muted-foreground/20'}`}>
               <div className="flex items-center gap-3">
                 <div className="text-3xl">{lesson.completed ? '✅' : '📖'}</div>
                 <div>
                   <h4 className="font-semibold">{lesson.title}</h4>
-                  <p className="text-sm text-muted-foreground">+{lesson.xp} XP</p>
+                  <p className="text-sm text-muted-foreground">+{lesson.xp_reward} XP</p>
                 </div>
               </div>
               {!lesson.completed && (
-                <Button className="bg-gradient-to-r from-primary to-turquoise">
+                <Button 
+                  className="bg-gradient-to-r from-primary to-turquoise"
+                  onClick={() => handleCompleteLesson(lesson)}
+                  disabled={loading}
+                >
                   Начать
                 </Button>
               )}
@@ -217,40 +329,44 @@ const Index = () => {
               className="pl-10 h-12 text-lg"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && loadUsers()}
             />
           </div>
+          <Button onClick={loadUsers} className="mt-3 w-full">
+            Искать
+          </Button>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {users.map(user => (
-          <Card key={user.id} className="hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer animate-scale-in" onClick={() => setSelectedUser(user)}>
+          <Card key={user.id} className="hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer animate-scale-in">
             <CardContent className="pt-6">
               <div className="flex items-start gap-4">
                 <div className="relative">
-                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-4xl ${user.isVip ? `bg-gradient-to-br ${getVipBadgeColor(user.vipBadge)} p-1` : 'bg-gradient-to-br from-muted to-muted-foreground/50'}`}>
+                  <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-4xl ${user.is_vip ? `bg-gradient-to-br ${getVipBadgeColor(user.vip_badge)} p-1` : 'bg-gradient-to-br from-muted to-muted-foreground/50'}`}>
                     <div className="bg-white rounded-xl w-full h-full flex items-center justify-center">
                       {user.avatar}
                     </div>
                   </div>
-                  {user.isVip && (
+                  {user.is_vip && (
                     <div className="absolute -top-2 -right-2 text-2xl animate-pulse-glow">
-                      {user.vipBadge === 'diamond' ? '💎' : '🥇'}
+                      {user.vip_badge === 'diamond' ? '💎' : '🥇'}
                     </div>
                   )}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-lg">{user.name}</h3>
-                    <span className="text-xl">{user.country === 'US' ? '🇺🇸' : user.country === 'JP' ? '🇯🇵' : user.country === 'IT' ? '🇮🇹' : '🇧🇷'}</span>
+                    <span className="text-xl">{getCountryFlag(user.country)}</span>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm">
                       <Badge variant="secondary" className="bg-primary/10">
-                        Говорит: {user.language}
+                        Говорит: {user.native_language}
                       </Badge>
                       <Badge variant="secondary" className="bg-secondary/10">
-                        Учит: {user.learning}
+                        Учит: {user.learning_language}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2">
@@ -261,11 +377,11 @@ const Index = () => {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button className="flex-1 bg-gradient-to-r from-primary to-turquoise">
+                <Button className="flex-1 bg-gradient-to-r from-primary to-turquoise" onClick={() => handleStartChat(user)}>
                   <Icon name="MessageCircle" size={18} className="mr-2" />
                   Написать
                 </Button>
-                <Button variant="outline" className="flex-1">
+                <Button variant="outline" className="flex-1" onClick={() => handleAddFriend(user.id)}>
                   <Icon name="UserPlus" size={18} className="mr-2" />
                   Добавить
                 </Button>
@@ -279,60 +395,104 @@ const Index = () => {
 
   const renderChats = () => (
     <div className="space-y-4 animate-fade-in">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <span className="text-2xl">💬</span>
-            Твои чаты
-          </CardTitle>
-          <CardDescription>Умный перевод в реальном времени</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[500px]">
-            <div className="space-y-3">
-              {users.slice(0, 3).map(user => (
-                <Card key={user.id} className="hover:shadow-md transition-all cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl">
-                          {user.avatar}
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-white"></div>
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{user.name}</h4>
-                        <p className="text-sm text-muted-foreground">Привет! Как дела?</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs text-muted-foreground">2 мин</span>
-                        {Math.random() > 0.5 && (
-                          <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center text-xs text-white font-bold mt-1">
-                            {Math.floor(Math.random() * 5 + 1)}
+      {!selectedChat ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-2xl">💬</span>
+              Твои чаты
+            </CardTitle>
+            <CardDescription>Умный перевод в реальном времени</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[500px]">
+              <div className="space-y-3">
+                {chats.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    Нет активных чатов. Найдите собеседника в разделе "Поиск"!
+                  </p>
+                ) : (
+                  chats.map(chat => (
+                    <Card key={chat.id} className="hover:shadow-md transition-all cursor-pointer" onClick={() => setSelectedChat(chat)}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl">
+                              {chat.partner_avatar}
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-white"></div>
                           </div>
-                        )}
-                      </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold">{chat.partner_name}</h4>
+                            <p className="text-sm text-muted-foreground truncate">{chat.last_message || 'Начните общение!'}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(chat.last_message_time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {chat.unread_count > 0 && (
+                              <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center text-xs text-white font-bold mt-1">
+                                {chat.unread_count}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedChat(null)}>
+              <Icon name="ArrowLeft" size={20} />
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="text-3xl">{selectedChat.partner_avatar}</div>
+              <div>
+                <CardTitle className="text-lg">{selectedChat.partner_name}</CardTitle>
+                <CardDescription>В сети</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px] mb-4">
+              <div className="space-y-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex gap-3 ${msg.sender_id === currentUser.id ? 'flex-row-reverse' : ''}`}>
+                    <div className="text-2xl">{msg.sender_avatar}</div>
+                    <div className={`max-w-[70%] rounded-2xl p-3 ${msg.sender_id === currentUser.id ? 'bg-primary text-white' : 'bg-muted'}`}>
+                      <p className="text-sm font-semibold mb-1">{msg.sender_name}</p>
+                      <p>{msg.message}</p>
+                      {msg.translated_message && (
+                        <p className="text-xs mt-2 opacity-70 italic">🤖 {msg.translated_message}</p>
+                      )}
+                      <p className="text-xs mt-1 opacity-70">
+                        {new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Введите сообщение..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              />
+              <Button onClick={handleSendMessage} className="bg-gradient-to-r from-primary to-turquoise">
+                <Icon name="Send" size={20} />
+              </Button>
             </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-gradient-to-r from-primary/10 to-turquoise/10 border-primary/30">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="text-5xl">🤖</div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg mb-1">ИИ Переводчик PRO</h3>
-              <p className="text-sm text-muted-foreground">Автоматический перевод и транскрипция голосовых</p>
-            </div>
-            <Badge className="bg-gold text-white">VIP</Badge>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 
@@ -399,64 +559,11 @@ const Index = () => {
               </Card>
             ))}
           </div>
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            У вас: {currentUser.coins} 🪙
+          </p>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <span className="text-2xl">🖼️</span>
-            Рамки для аватара
-          </CardTitle>
-          <CardDescription>Выделись среди других!</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-            {['🌟', '⚡', '🔥', '💎', '🌈', '👑'].map((frame, idx) => (
-              <div key={idx} className="aspect-square rounded-2xl border-4 border-dashed border-primary/30 hover:border-primary transition-all cursor-pointer hover:scale-110 flex items-center justify-center text-4xl animate-scale-in" style={{animationDelay: `${idx * 0.1}s`}}>
-                {frame}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  const renderAchievements = () => (
-    <div className="space-y-6 animate-fade-in">
-      <Card className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white border-none">
-        <CardHeader className="text-center">
-          <div className="text-6xl mb-4">🏆</div>
-          <CardTitle className="text-3xl">Достижения</CardTitle>
-          <CardDescription className="text-white/90 text-lg">Собери их все!</CardDescription>
-        </CardHeader>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {achievements.map(achievement => (
-          <Card key={achievement.id} className={`transition-all hover:shadow-lg ${achievement.unlocked ? 'border-success bg-success/5' : 'opacity-60'}`}>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className={`text-5xl ${!achievement.unlocked && 'grayscale'}`}>
-                  {achievement.icon}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg mb-1">{achievement.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-3">{achievement.description}</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span>{achievement.unlocked ? 'Выполнено!' : 'В процессе...'}</span>
-                      <span className="font-semibold">{achievement.progress}%</span>
-                    </div>
-                    <Progress value={achievement.progress} className="h-2" />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 
@@ -470,23 +577,29 @@ const Index = () => {
                 {currentUser.avatar}
               </div>
             </div>
-            <div className="absolute -top-3 -right-3 text-4xl">
-              🥇
-            </div>
+            {currentUser.is_vip && (
+              <div className="absolute -top-3 -right-3 text-4xl">
+                {currentUser.vip_badge === 'diamond' ? '💎' : '🥇'}
+              </div>
+            )}
           </div>
           <h2 className="text-3xl font-bold mb-2">{currentUser.name}</h2>
-          <Badge className="bg-gold text-white mb-4">Gold VIP Member</Badge>
+          {currentUser.is_vip && (
+            <Badge className="bg-gold text-white mb-4">
+              {currentUser.vip_badge === 'diamond' ? 'Diamond' : 'Gold'} VIP Member
+            </Badge>
+          )}
           <div className="grid grid-cols-3 gap-4 mt-6">
             <div>
-              <div className="text-3xl font-bold">15</div>
+              <div className="text-3xl font-bold">{currentUser.level}</div>
               <div className="text-sm opacity-90">Уровень</div>
             </div>
             <div>
-              <div className="text-3xl font-bold">234</div>
-              <div className="text-sm opacity-90">Друзья</div>
+              <div className="text-3xl font-bold">{chats.length}</div>
+              <div className="text-sm opacity-90">Чаты</div>
             </div>
             <div>
-              <div className="text-3xl font-bold">12</div>
+              <div className="text-3xl font-bold">{currentUser.streak_days || 0}</div>
               <div className="text-sm opacity-90">Дни подряд</div>
             </div>
           </div>
@@ -500,18 +613,32 @@ const Index = () => {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
             <div className="flex items-center gap-3">
-              <div className="text-3xl">🇬🇧</div>
+              <div className="text-3xl">🌐</div>
               <div>
-                <h4 className="font-semibold">Английский</h4>
-                <p className="text-sm text-muted-foreground">Средний уровень</p>
+                <h4 className="font-semibold">{currentUser.learning_language}</h4>
+                <p className="text-sm text-muted-foreground">Уровень {currentUser.level}</p>
               </div>
             </div>
             <Badge>Активный</Badge>
           </div>
-          <Button variant="outline" className="w-full">
-            <Icon name="Plus" size={18} className="mr-2" />
-            Добавить язык
-          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Достижения</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {achievements.map(ach => (
+              <div key={ach.id} className={`p-4 rounded-xl border-2 text-center transition-all ${ach.unlocked ? 'border-success bg-success/5' : 'border-muted opacity-50'}`}>
+                <div className={`text-4xl mb-2 ${!ach.unlocked && 'grayscale'}`}>{ach.icon}</div>
+                <h4 className="font-semibold text-sm mb-1">{ach.name}</h4>
+                <Progress value={ach.progress} className="h-1" />
+                <p className="text-xs text-muted-foreground mt-1">{ach.progress}%</p>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -522,18 +649,22 @@ const Index = () => {
         <CardContent className="space-y-4">
           <div className="flex justify-between items-center">
             <span className="text-sm">Слов выучено</span>
-            <span className="font-bold text-lg">1,234</span>
+            <span className="font-bold text-lg">{currentUser.words_learned || 0}</span>
           </div>
           <Separator />
           <div className="flex justify-between items-center">
             <span className="text-sm">Сообщений отправлено</span>
-            <span className="font-bold text-lg">856</span>
+            <span className="font-bold text-lg">{currentUser.total_messages || 0}</span>
           </div>
           <Separator />
           <div className="flex justify-between items-center">
             <span className="text-sm">Подарков получено</span>
-            <span className="font-bold text-lg">23</span>
+            <span className="font-bold text-lg">{currentUser.gifts_received || 0}</span>
           </div>
+          <Separator />
+          <Button variant="destructive" onClick={logout} className="w-full mt-4">
+            Выйти из аккаунта
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -562,6 +693,9 @@ const Index = () => {
             <TabsTrigger value="chats" className="flex flex-col gap-1 py-3">
               <Icon name="MessageCircle" size={24} />
               <span className="text-xs">Чаты</span>
+              {chats.some(c => c.unread_count > 0) && (
+                <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></div>
+              )}
             </TabsTrigger>
             <TabsTrigger value="vip" className="flex flex-col gap-1 py-3">
               <Icon name="Crown" size={24} />
@@ -580,15 +714,17 @@ const Index = () => {
           <TabsContent value="profile">{renderProfile()}</TabsContent>
         </Tabs>
 
-        <div className="fixed bottom-4 right-4">
-          <Button 
-            size="lg" 
-            className="rounded-full w-16 h-16 shadow-2xl bg-gradient-to-r from-secondary to-coral animate-pulse-glow"
-            onClick={() => setActiveTab('chats')}
-          >
-            <Icon name="MessageCircle" size={28} />
-          </Button>
-        </div>
+        {selectedChat && (
+          <div className="fixed bottom-4 right-4">
+            <Button 
+              size="lg" 
+              className="rounded-full w-16 h-16 shadow-2xl bg-gradient-to-r from-secondary to-coral animate-pulse-glow"
+              onClick={() => setActiveTab('chats')}
+            >
+              <Icon name="MessageCircle" size={28} />
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-primary/10 to-transparent h-2 pointer-events-none"></div>
